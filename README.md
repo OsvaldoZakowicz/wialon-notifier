@@ -1,36 +1,69 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# wialon-notifier
 
-## Getting Started
+**estado actual: solo captura.** el endpoint recibe el post de wialon, lo parsea y lo guarda para
+inspeccionarlo. el envio por telegram se conecta despues, cuando confirmemos que los datos que
+llegan son los esperados.
 
-First, run the development server:
+## correr local
 
 ```bash
+npm install
+cp .env.example .env.local
+# completar WIALON_WEBHOOK_SECRET con cualquier valor, ej: dev123
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+esto levanta el server en `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## probar sin wialon (con curl)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+para simular el post que manda wialon, usando tu template real:
 
-## Learn More
+```bash
+curl -X POST "http://localhost:3000/api/notifications/wialon?token=dev123" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "speed=85&speedLimit=60&exceed=25&unit=Camion01&location=Ruta101km12&time=2026-07-20T10:30:00&driver=Juan+Perez&temp=4.5&fuel=78&licensePlate=ABC123&client=cliente_01"
+```
 
-To learn more about Next.js, take a look at the following resources:
+si todo anda bien te responde con json y la notificacion aparece en `http://localhost:3000`
+(se refresca sola cada 5 segundos).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## exponer a internet para probar con wialon de verdad
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+wialon necesita pegarle a una url publica, no a tu `localhost`. mientras desarrollás, la forma
+mas rapida es con [ngrok](https://ngrok.com/) o `cloudflared`:
 
-## Deploy on Vercel
+```bash
+ngrok http 3000
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+eso te da una url tipo `https://algo-random.ngrok-free.app`. la url completa para configurar en
+wialon queda:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+https://algo-random.ngrok-free.app/api/notifications/wialon?token=dev123
+```
+
+## configurar en wialon
+
+en el constructor de notificaciones, accion "ejecutar un post" (o equivalente segun version):
+
+- url: la de arriba (ngrok o tu dominio real)
+- metodo: post
+- content-type: `application/x-www-form-urlencoded`
+- body: tu template real, agregando `&client=cliente_01` al final (texto fijo, identifica al
+  cliente de OberSat, no es un tag de wialon)
+
+## estructura actual
+
+- `app/api/notifications/wialon/route.ts` — recibe el post, valida el token, parsea y guarda
+- `app/page.tsx` — pagina para ver las ultimas notificaciones capturadas
+- `lib/notifications/WialonNotification.ts` — parser: body crudo → dto tipado
+- `lib/storage/NotificationStore.ts` — store en memoria (singleton) para el prototipo
+
+## proximo paso
+
+una vez que confirmemos que los datos capturados son los correctos (¿el `client` llega bien?
+¿los sensores tienen el nombre esperado? ¿el `time` viene en el formato que pensamos?), conectamos
+el envio por telegram: `MessageProvider` + `TelegramAdapter` + `MessagingProviderFactory`
+(ya diseñados, quedan afuera del código por ahora a propósito).
