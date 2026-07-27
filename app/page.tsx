@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { CapturedNotification } from '@/lib/storage/NotificationStore';
+import type { CapturedNotification } from '@/lib/storage/NotificationRepository';
 
 export default function Home() {
   const [notifications, setNotifications] = useState<CapturedNotification[]>(
@@ -42,9 +42,8 @@ export default function Home() {
           style={{
             background: '#1e293b',
             borderRadius: 8,
-            padding: '0.5rem',
+            padding: '1rem',
             marginBottom: '1rem',
-            fontSize: '0.8rem',
           }}
         >
           <strong style={{ color: '#38bdf8' }}>{n.receivedAt}</strong>
@@ -55,7 +54,7 @@ export default function Home() {
             <summary style={{ cursor: 'pointer', color: '#94a3b8' }}>
               body crudo
             </summary>
-            <pre style={{ whiteSpace: 'normal', color: '#64748b' }}>
+            <pre style={{ whiteSpace: 'pre-wrap', color: '#64748b' }}>
               {JSON.stringify(n.rawBody, null, 2)}
             </pre>
           </details>
