@@ -22,7 +22,7 @@ export interface TemplateParameter {
  *    antes - que es exactamente el caso de una alerta de wialon. requiere tener la
  *    plantilla ya aprobada en meta business manager antes de poder usarla.
  *
- * ver /PENDIENTES-WHATSAPP.md para el estado real de esto en OberSat: todavia no hay
+ * ver /PENDIENTES.md para el estado real de esto en OberSat: todavia no hay
  * acceso a la api ni plantillas creadas, asi que ninguno de los dos metodos se puede
  * probar en la practica todavia. el codigo queda listo para cuando eso este resuelto.
  */

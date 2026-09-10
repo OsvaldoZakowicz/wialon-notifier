@@ -1,0 +1,321 @@
+@startuml
+' Diagrama de arquitectura de wialon-notifier
+' Elaborado a partir de los archivos fuente reales del repositorio.
+' Los identificadores de clases, interfaces, tipos y metodos conservan
+' exactamente los nombres usados en el codigo TypeScript.
+
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+
+title wialon-notifier - arquitectura de clases
+
+package "app/api/notifications/wialon" {
+  class "route" as routeHandler <<handler>> {
+    {static} POST(request: Request) : Promise<Response>
+    {static} GET() : Promise<Response>
+  }
+  note bottom of routeHandler
+    Valida ?token contra WIALON_WEBHOOK_SECRET.
+    Recibe JSON o form-urlencoded; el fallo del envio
+    no tira abajo la captura ya guardada.
+  end note
+
+  class "parseIncomingBody" as pib <<function>> {
+    parseIncomingBody(request: Request) : Promise<Record<string, unknown>>
+  }
+  note bottom of pib
+    Funcion de modulo (no exportada): normaliza
+    el body de JSON o form-urlencoded a objeto plano.
+  end note
+
+  routeHandler ..> pib : normaliza body
+  routeHandler ..> WialonNotificationParser : parse(rawBody)
+  routeHandler ..> formatNotificationMessage : formato del mensaje
+  routeHandler ..> notificationRepository : add() / getAll()
+  routeHandler ..> NotificationDispatcher : dispatch(phone, message, 'telegram')
+}
+
+package "lib/notifications" {
+  interface WialonNotification {
+    {field} notificationTitle : string
+    {field} unit : string
+    {field} unitId? : string
+    {field} eventTime : string
+    {field} location? : string
+    {field} speed? : string
+    {field} speedLimit? : string
+    {field} exceed? : string
+    {field} client? : string
+    {field} phone? : string
+  }
+  note bottom of WialonNotification
+    DTO con los campos que envia Wialon segun el
+    template configurado. notificationTitle y unit
+    tienen fallback en el parser (no son opcionales).
+  end note
+
+  class WialonNotificationParser <<static>> {
+    {static} parse(raw: Record<string, unknown>) : WialonNotification
+    {static} - optionalField(value: unknown) : string | undefined
+  }
+  note bottom of WialonNotificationParser
+    Desacoplado del transporte HTTP: transforma
+    datos crudos en el DTO. el campo tel del body
+    se mapea a phone.
+  end note
+  WialonNotificationParser ..> WialonNotification : crea
+
+  class "formatNotificationMessage" as formatNotificationMessage <<function>> {
+    formatNotificationMessage(notification: WialonNotification) : string
+  }
+  note bottom of formatNotificationMessage
+    Separado del parser (single responsibility):
+    arma el texto final del mensaje.
+  end note
+  formatNotificationMessage ..> WialonNotification : lee
+}
+
+package "lib/messaging" {
+  interface MessageProvider {
+    send(to: string, message: string) : Promise<void>
+  }
+  note bottom of MessageProvider
+    Contrato comun de los adapters de mensajeria
+    (adapter pattern). el resto del sistema solo
+    conoce esta interfaz, nunca el canal concreto.
+  end note
+
+  class TelegramAdapter <<adapter>> {
+    - botToken : string
+    + TelegramAdapter(botToken: string)
+    + send(to: string, message: string) : Promise<void>
+  }
+  note bottom of TelegramAdapter
+    Telegram bot API. to es un chat_id (el usuario
+    debe haberle escrito primero al bot).
+  end note
+  TelegramAdapter ..|> MessageProvider
+
+  interface TemplateParameter {
+    {field} type : 'text'
+    {field} text : string
+  }
+  note bottom of TemplateParameter
+    Parametro que rellena una variable {{n}}
+    de una plantilla aprobada por Meta.
+  end note
+
+  class WhatsAppAdapter <<adapter>> {
+    - accessToken : string
+    - phoneNumberId : string
+    + WhatsAppAdapter(accessToken: string, phoneNumberId: string)
+    + send(to: string, message: string) : Promise<void>
+    + sendTemplate(to: string, templateName: string, languageCode: string, parameters: TemplateParameter[] = []) : Promise<void>
+  }
+  note bottom of WhatsAppAdapter
+    WhatsApp Business Cloud API. send() es texto libre
+    (ventana de 24hs); sendTemplate() es el unico
+    metodo valido para mensajes iniciados por el negocio.
+  end note
+  WhatsAppAdapter ..|> MessageProvider
+  WhatsAppAdapter ..> TemplateParameter
+
+  class "MessagingChannel" as MessagingChannel <<type>> {
+    {field} 'telegram' | 'whatsapp'
+  }
+
+  class MessagingProviderFactory <<factory>> {
+    {static} create(channel: MessagingChannel) : MessageProvider
+  }
+  note bottom of MessagingProviderFactory
+    Factory pattern: centraliza la creacion de
+    adapters y la lectura de sus credenciales de env.
+  end note
+  MessagingProviderFactory ..> MessagingChannel
+  MessagingProviderFactory ..> TelegramAdapter : crea (TELEGRAM_BOT_TOKEN)
+  MessagingProviderFactory ..> WhatsAppAdapter : crea (WHATSAPP_*_TOKEN/PHONE_NUMBER_ID)
+  MessagingProviderFactory ..> MessageProvider : devuelve
+
+  interface ContactDirectory {
+    resolveRecipient(phone: string, channel: MessagingChannel) : Promise<string | undefined>
+  }
+  note bottom of ContactDirectory
+    Repository pattern: abstrae el mapeo
+    telefono -> identificador por canal.
+  end note
+  ContactDirectory ..> MessagingChannel
+
+  class InMemoryContactDirectory <<adapter>> {
+    - telegramChatIdsByPhone : Record<string, string>
+    + resolveRecipient(phone: string, channel: MessagingChannel) : Promise<string | undefined>
+  }
+  note bottom of InMemoryContactDirectory
+    Para desarrollo sin Supabase: cargar un
+    contacto nuevo es editar el archivo a mano.
+  end note
+  InMemoryContactDirectory ..|> ContactDirectory
+
+  class SupabaseContactDirectory <<adapter>> {
+    - client : SupabaseClient
+    + SupabaseContactDirectory(client: SupabaseClient)
+    + resolveRecipient(phone: string, channel: MessagingChannel) : Promise<string | undefined>
+  }
+  note bottom of SupabaseContactDirectory
+    Consulta la tabla contacts por telefono.
+    En whatsapp devuelve el telefono directo,
+    sin consultar la tabla.
+  end note
+  SupabaseContactDirectory ..|> ContactDirectory
+
+  class "createContactDirectory" as createContactDirectory <<function>> {
+    createContactDirectory() : ContactDirectory
+  }
+  note bottom of createContactDirectory
+    Funcion de modulo (no exportada): si hay
+    SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY usa
+    Supabase; si no, cae a memoria (dev local).
+  end note
+  createContactDirectory ..> ContactDirectory : devuelve
+  createContactDirectory ..> SupabaseContactDirectory : crea
+  createContactDirectory ..> InMemoryContactDirectory : crea (fallback)
+  createContactDirectory ..> getSupabaseClient : lee credenciales
+  createContactDirectory ..> contactDirectory : crea el singleton
+
+  class "contactDirectory" as contactDirectory <<instance>> {
+    : ContactDirectory
+  }
+  note bottom of contactDirectory
+    Singleton exportado por ContactDirectoryFactory.ts
+  end note
+
+  class NotificationDispatcher <<static>> {
+    {static} dispatch(phone: string, message: string, channel: MessagingChannel) : Promise<void>
+  }
+  note bottom of NotificationDispatcher
+    Punto unico de entrada para notificar sin
+    importar el canal. el route handler no sabe
+    nada de telegram ni whatsapp.
+  end note
+  NotificationDispatcher ..> contactDirectory : usa el singleton
+  NotificationDispatcher ..> MessagingProviderFactory : create(channel)
+  NotificationDispatcher ..> MessageProvider : provider.send(recipient, message)
+  NotificationDispatcher ..> MessagingChannel
+}
+
+package "lib/storage" {
+  class "CapturedNotification" as CapturedNotification <<type>> {
+    {field} receivedAt : string
+    {field} rawBody : Record<string, unknown>
+    {field} parsed : WialonNotification
+  }
+  CapturedNotification ..> WialonNotification
+
+  interface NotificationRepository {
+    add(notification: CapturedNotification) : Promise<void>
+    getAll() : Promise<CapturedNotification[]>
+  }
+  note bottom of NotificationRepository
+    Repository pattern: el resto de la app solo
+    conoce esta interfaz, nunca sabe si atras hay
+    memoria, supabase, o lo que sea.
+  end note
+  NotificationRepository ..> CapturedNotification
+
+  class InMemoryNotificationRepository <<singleton>> {
+    - static instance : InMemoryNotificationRepository
+    - maxItems : number = 20
+    - items : CapturedNotification[]
+    - InMemoryNotificationRepository() ' privado
+    {static} getInstance() : InMemoryNotificationRepository
+    + add(notification: CapturedNotification) : Promise<void>
+    + getAll() : Promise<CapturedNotification[]>
+  }
+  note bottom of InMemoryNotificationRepository
+    Singleton con constructor privado. Solo sirve
+    para dev local; en serverless no persiste
+    de forma confiable entre invocaciones.
+  end note
+  InMemoryNotificationRepository ..|> NotificationRepository
+  InMemoryNotificationRepository ..> CapturedNotification
+
+  class SupabaseNotificationRepository {
+    - client : SupabaseClient
+    - maxItems : number = 20
+    + SupabaseNotificationRepository(client: SupabaseClient)
+    + add(notification: CapturedNotification) : Promise<void>
+    + getAll() : Promise<CapturedNotification[]>
+  }
+  note bottom of SupabaseNotificationRepository
+    Persiste en la tabla notifications_log
+    (snake_case, distinto al DTO de la app).
+  end note
+  SupabaseNotificationRepository ..|> NotificationRepository
+  SupabaseNotificationRepository ..> CapturedNotification
+
+  class "createNotificationRepository" as createNotificationRepository <<function>> {
+    createNotificationRepository() : NotificationRepository
+  }
+  note bottom of createNotificationRepository
+    Funcion de modulo (no exportada): mismo
+    criterio de fallback que ContactDirectoryFactory.
+  end note
+  createNotificationRepository ..> NotificationRepository : devuelve
+  createNotificationRepository ..> SupabaseNotificationRepository : crea
+  createNotificationRepository ..> InMemoryNotificationRepository : getInstance() (fallback)
+  createNotificationRepository ..> getSupabaseClient : lee credenciales
+  createNotificationRepository ..> notificationRepository : crea el singleton
+
+  class "notificationRepository" as notificationRepository <<instance>> {
+    : NotificationRepository
+  }
+  note bottom of notificationRepository
+    Singleton exportado por NotificationRepositoryFactory.ts
+  end note
+}
+
+package "lib/supabase" {
+  class "getSupabaseClient" as getSupabaseClient <<function>> {
+    getSupabaseClient() : SupabaseClient | null
+  }
+  note bottom of getSupabaseClient
+    Singleton cacheado: cliente unico y reutilizado
+    entre ambas factories. Devuelve null si faltan
+    SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY.
+  end note
+
+  class "SupabaseClient" as SupabaseClient <<external>> {
+    from(table: string)
+  }
+  note bottom of SupabaseClient
+    Tipo de @supabase/supabase-js
+  end note
+  getSupabaseClient ..> SupabaseClient : crea si hay credenciales
+
+  entity "contacts" as contactsTable {
+    * id : uuid [PK]
+    * phone : text [unique]
+    telegram_chat_id : text
+    client_id : text
+    * created_at : timestamptz
+  }
+  note bottom of contactsTable
+    RLS activado: solo el backend (service role) accede.
+  end note
+
+  entity "notifications_log" as notificationsLog {
+    * id : uuid [PK]
+    * raw_body : jsonb
+    * parsed : jsonb
+    * received_at : timestamptz
+  }
+  note right of notificationsLog
+    Indice sobre received_at (listado reciente).
+    RLS activado: solo el backend accede.
+  end note
+
+  SupabaseContactDirectory ..> contactsTable : phone -> telegram_chat_id
+  SupabaseNotificationRepository ..> notificationsLog : insert / select
+}
+
+hide circle
+@enduml
