@@ -3,12 +3,13 @@ import type { NextRequest } from 'next/server';
 
 /**
  * protege la pagina de inspeccion y el GET del endpoint con basic auth.
+ * (convencion "proxy" de next 16, antes se llamaba middleware)
  *
  * el POST de wialon queda afuera a proposito: wialon no puede responder a un prompt
  * de login, y ya se autentica solo con su propio ?token= (ver route.ts). mezclar los
  * dos mecanismos de auth en el mismo request rompería la notificacion real.
  */
-export function middleware(request: NextRequest): NextResponse {
+export function proxy(request: NextRequest): NextResponse {
   if (request.method === 'POST') {
     return NextResponse.next();
   }

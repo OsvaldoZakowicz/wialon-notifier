@@ -115,7 +115,7 @@ lib/
     ├── client.ts                         # cliente unico y compartido
     └── schema.sql                        # tablas notifications_log y contacts
 
-middleware.ts                             # basic auth (pagina + GET, no el POST de wialon)
+proxy.ts                                  # basic auth (pagina + GET, no el POST de wialon)
 PENDIENTES.md                         # que falta para conectar whatsapp de verdad
 ```
 
