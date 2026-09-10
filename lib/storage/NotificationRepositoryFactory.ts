@@ -1,15 +1,15 @@
 import { InMemoryNotificationRepository } from './InMemoryNotificationRepository';
 import { SupabaseNotificationRepository } from './SupabaseNotificationRepository';
 import type { NotificationRepository } from './NotificationRepository';
+import { getSupabaseClient } from '../supabase/client';
 
 // factory pattern: si hay credenciales de supabase configuradas, las usa (produccion);
 // si no, cae a memoria (desarrollo local sin necesidad de tener supabase a mano)
 function createNotificationRepository(): NotificationRepository {
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const client = getSupabaseClient();
 
-  if (supabaseUrl && supabaseKey) {
-    return new SupabaseNotificationRepository(supabaseUrl, supabaseKey);
+  if (client) {
+    return new SupabaseNotificationRepository(client);
   }
 
   console.warn(

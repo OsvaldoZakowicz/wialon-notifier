@@ -4,7 +4,8 @@ import type {
   NotificationRepository,
 } from './NotificationRepository';
 
-// forma de la fila tal como la devuelve supabase (snake_case, distinto al dto que usa el resto de la app)
+// forma de la fila tal como la devuelve supabase
+// (snake_case, distinto al dto que usa el resto de la app)
 interface NotificationRow {
   raw_body: Record<string, unknown>;
   parsed: CapturedNotification['parsed'];
@@ -12,12 +13,9 @@ interface NotificationRow {
 }
 
 export class SupabaseNotificationRepository implements NotificationRepository {
-  private readonly client: SupabaseClient;
   private readonly maxItems = 20;
 
-  constructor(supabaseUrl: string, supabaseKey: string) {
-    this.client = createClient(supabaseUrl, supabaseKey);
-  }
+  constructor(private readonly client: SupabaseClient) {}
 
   async add(notification: CapturedNotification): Promise<void> {
     const { error } = await this.client.from('notifications_log').insert({
