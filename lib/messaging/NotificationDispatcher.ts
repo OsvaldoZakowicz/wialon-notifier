@@ -2,7 +2,7 @@ import {
   MessagingProviderFactory,
   type MessagingChannel,
 } from './MessagingProviderFactory';
-import { contactDirectory } from './ContactDirectory';
+import { contactDirectory } from './ContactDirectoryFactory';
 
 /**
  * punto unico de entrada para mandar una notificacion, sin importar el canal
@@ -16,7 +16,7 @@ export class NotificationDispatcher {
     message: string,
     channel: MessagingChannel,
   ): Promise<void> {
-    const recipient = contactDirectory.resolveRecipient(phone, channel);
+    const recipient = await contactDirectory.resolveRecipient(phone, channel);
 
     if (!recipient) {
       throw new Error(
