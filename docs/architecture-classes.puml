@@ -1,0 +1,140 @@
+@startuml
+' Diagrama de arquitectura de wialon-notifier (clases e interfaces).
+' Los identificadores de clases, interfaces y metodos conservan
+' exactamente los nombres usados en el codigo TypeScript.
+
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+
+title wialon-notifier - clases e interfaces
+
+package "app/api/notifications/wialon" {
+  class "route" as routeHandler <<handler>> {
+    {static} POST(request: Request) : Promise<Response>
+    {static} GET() : Promise<Response>
+  }
+}
+
+package "lib/notifications" {
+  interface WialonNotification {
+    notificationTitle : string
+    unit : string
+    unitId? : string
+    eventTime : string
+    location? : string
+    speed? : string
+    speedLimit? : string
+    exceed? : string
+    client? : string
+    to? : string
+    channel? : string
+  }
+
+  class WialonNotificationParser <<static>> {
+    {static} parse(raw: Record<string, unknown>) : WialonNotification
+  }
+  WialonNotificationParser ..> WialonNotification : crea
+
+  class "formatNotificationMessage" as formatNotificationMessage <<function>> {
+    formatNotificationMessage(notification: WialonNotification) : string
+  }
+  formatNotificationMessage ..> WialonNotification : lee
+}
+
+package "lib/messaging" {
+  interface MessageProvider {
+    send(to: string, message: string) : Promise<void>
+  }
+
+  class TelegramAdapter <<adapter>>
+  class WhatsAppAdapter <<adapter>>
+  TelegramAdapter ..|> MessageProvider
+  WhatsAppAdapter ..|> MessageProvider
+
+  class MessagingProviderFactory <<factory>> {
+    {static} create(channel: MessagingChannel) : MessageProvider
+  }
+  MessagingProviderFactory ..> TelegramAdapter : crea
+  MessagingProviderFactory ..> WhatsAppAdapter : crea
+  MessagingProviderFactory ..> MessageProvider : devuelve
+
+  interface ContactDirectory {
+    resolveRecipients(to: string, channel: MessagingChannel) : Promise<string[]>
+  }
+
+  class InMemoryContactDirectory <<adapter>>
+  class SupabaseContactDirectory <<adapter>>
+  InMemoryContactDirectory ..|> ContactDirectory
+  SupabaseContactDirectory ..|> ContactDirectory
+  SupabaseContactDirectory ..> contactDirectory : crea el singleton
+  InMemoryContactDirectory ..> contactDirectory : crea el singleton (fallback)
+
+  class "contactDirectory" as contactDirectory <<singleton>> {
+    : ContactDirectory
+  }
+
+  class NotificationDispatcher <<static>> {
+    {static} dispatch(to: string, message: string, channel: MessagingChannel) : Promise<void>
+  }
+  NotificationDispatcher ..> contactDirectory : usa
+  NotificationDispatcher ..> MessagingProviderFactory : create(channel)
+}
+
+package "lib/storage" {
+  class "CapturedNotification" as CapturedNotification <<type>> {
+    receivedAt : string
+    rawBody : Record<string, unknown>
+    parsed : WialonNotification
+  }
+  CapturedNotification ..> WialonNotification
+
+  interface NotificationRepository {
+    add(notification: CapturedNotification) : Promise<void>
+    getAll() : Promise<CapturedNotification[]>
+  }
+  NotificationRepository ..> CapturedNotification
+
+  class InMemoryNotificationRepository <<singleton>>
+  class SupabaseNotificationRepository <<adapter>>
+  InMemoryNotificationRepository ..|> NotificationRepository
+  SupabaseNotificationRepository ..|> NotificationRepository
+
+  class "notificationRepository" as notificationRepository <<singleton>> {
+    : NotificationRepository
+  }
+  SupabaseNotificationRepository ..> notificationRepository : crea el singleton
+  InMemoryNotificationRepository ..> notificationRepository : crea el singleton (fallback)
+}
+
+package "lib/supabase" {
+  class "getSupabaseClient" as getSupabaseClient <<function>> {
+    getSupabaseClient() : SupabaseClient | null
+  }
+
+  entity "contacts" as contactsTable {
+    * id : uuid [PK]
+    * name : text [unique]
+    phone : text
+    telegram_chat_id : text
+    * created_at : timestamptz
+  }
+
+  entity "notifications_log" as notificationsLog {
+    * id : uuid [PK]
+    * raw_body : jsonb
+    * parsed : jsonb
+    * received_at : timestamptz
+  }
+
+  SupabaseContactDirectory ..> contactsTable : consulta name
+  SupabaseNotificationRepository ..> notificationsLog : insert / select
+}
+
+' dependencias del route handler
+routeHandler ..> WialonNotificationParser : parse(rawBody)
+routeHandler ..> formatNotificationMessage : formato del mensaje
+routeHandler ..> notificationRepository : add() / getAll()
+routeHandler ..> NotificationDispatcher : dispatch(to, message, channel)
+
+hide circle
+@enduml

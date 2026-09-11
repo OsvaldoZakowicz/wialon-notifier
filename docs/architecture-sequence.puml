@@ -1,0 +1,43 @@
+@startuml
+' Diagrama de secuencia de wialon-notifier (captura y envio de una notificacion).
+
+title wialon-notifier - secuencia de un POST (captura y envio)
+
+actor Wialon
+participant "route" as route
+participant "WialonNotificationParser" as parser
+participant "notificationRepository" as repo
+participant "NotificationDispatcher" as dispatcher
+participant "ContactDirectory" as directory
+participant "MessagingProviderFactory" as factory
+participant "MessageProvider" as provider
+database Supabase
+
+Wialon -> route : POST /api/notifications/wialon?token=...
+route -> route : valida token y normaliza el body
+route -> parser : parse(rawBody)
+parser --> route : WialonNotification
+route -> repo : add(notification)
+repo -> Supabase : insert notifications_log
+repo --> route : ok
+
+alt hay to= en el post
+  route -> dispatcher : dispatch(to, message, channel)
+  dispatcher -> directory : resolveRecipients(to, channel)
+  directory -> Supabase : select contacts por name (o todos)
+  directory --> dispatcher : string[]
+  alt hay destinatarios
+    dispatcher -> factory : create(channel)
+    factory --> dispatcher : MessageProvider
+    loop por cada destinatario
+      dispatcher -> provider : send(recipient, message)
+    end
+  else no hay destinatarios
+    dispatcher -> dispatcher : log de aviso, no envia
+  end
+else no hay to=
+  route -> route : log de aviso, no envia
+end
+
+route --> Wialon : { ok: true, parsed }
+@enduml
