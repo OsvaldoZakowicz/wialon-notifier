@@ -42,21 +42,18 @@ export async function POST(request: Request) {
 
     console.log('notificacion de wialon recibida:', rawBody);
 
-    if (parsed.phone) {
+    if (parsed.to) {
       const message = formatNotificationMessage(parsed);
-      // si el envio falla (ej: no hay chat_id mapeado para ese telefono en telegram),
-      // no queremos que eso tire abajo la respuesta de captura, que ya se guardo bien
+      const channel = parsed.channel === 'whatsapp' ? 'whatsapp' : 'telegram';
       try {
-        await NotificationDispatcher.dispatch(
-          parsed.phone,
-          message,
-          'telegram',
-        );
+        await NotificationDispatcher.dispatch(parsed.to, message, channel);
       } catch (dispatchError) {
         console.error('error enviando la notificacion', dispatchError);
       }
     } else {
-      console.warn('notificacion sin telefono, no se envia mensaje');
+      console.warn(
+        'notificacion sin destinatarios (falta to=), no se envia mensaje',
+      );
     }
 
     return Response.json({ ok: true, parsed });

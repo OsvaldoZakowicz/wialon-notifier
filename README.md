@@ -79,8 +79,10 @@ en el constructor de notificaciones, accion "ejecutar un post" (o equivalente se
 - url: `https://tu-proyecto.vercel.app/api/notifications/wialon?token=TU_SECRETO`
 - metodo: post
 - content-type: `application/x-www-form-urlencoded`
-- body: tu template real, agregando `&client=cliente_01&tel=+5493751234567` al final
-  (texto fijo, no son tags de wialon)
+- body: tu template real, agregando `&client=cliente_01&to=osval&channel=telegram` al final
+  (texto fijo, no son tags de wialon). `client` se muestra en el mensaje, `to` elige los
+  destinatarios (broadcast o lista de nombres separados por coma desde la tabla `contacts`)
+  y `channel` es telegram o whatsapp (default telegram)
 
 ## estructura
 
@@ -105,7 +107,7 @@ lib/
 │   ├── TelegramAdapter.ts
 │   ├── WhatsAppAdapter.ts                # send() + sendTemplate(), ver pendientes
 │   ├── MessagingProviderFactory.ts       # elige el adapter segun canal
-│   ├── ContactDirectory.ts               # interfaz: telefono -> destinatario por canal
+│   ├── ContactDirectory.ts               # interfaz: resolveRecipients(to, channel) -> destinatarios
 │   ├── InMemoryContactDirectory.ts       # dev local
 │   ├── SupabaseContactDirectory.ts       # produccion
 │   ├── ContactDirectoryFactory.ts        # elige cual usar

@@ -7,24 +7,33 @@ import { contactDirectory } from './ContactDirectoryFactory';
 /**
  * punto unico de entrada para mandar una notificacion, sin importar el canal
  *
- * el route handler no sabe nada de telegram ni whatsapp, ni de como se resuelve el
- * destinatario: solo le dice "mandale esto a este telefono por este canal"
+ * el route handler no sabe nada de telegram ni whatsapp, ni de como se resuelven
+ * los destinatarios: solo le dice "mandale esto a estos tecnicos por este canal"
  */
 export class NotificationDispatcher {
   static async dispatch(
-    phone: string,
+    to: string,
     message: string,
     channel: MessagingChannel,
   ): Promise<void> {
-    const recipient = await contactDirectory.resolveRecipient(phone, channel);
+    const recipients = await contactDirectory.resolveRecipients(to, channel);
 
-    if (!recipient) {
-      throw new Error(
-        `no se encontro destinatario de ${channel} para el telefono ${phone}`,
+    if (recipients.length === 0) {
+      console.warn(
+        `no hay destinatarios de ${channel} para "${to}", no se envia mensaje`,
       );
+      return;
     }
 
     const provider = MessagingProviderFactory.create(channel);
-    await provider.send(recipient, message);
+
+    for (const recipient of recipients) {
+      try {
+        await provider.send(recipient, message);
+      } catch (error) {
+        // un envio que falla no tira abajo los demas destinatarios
+        console.error(`error enviando a ${recipient} por ${channel}`, error);
+      }
+    }
   }
 }

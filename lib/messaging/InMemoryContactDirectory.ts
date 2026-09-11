@@ -1,6 +1,11 @@
 import type { ContactDirectory } from './ContactDirectory';
 import type { MessagingChannel } from './MessagingProviderFactory';
 
+interface InMemoryContact {
+  telegram_chat_id?: string;
+  phone?: string;
+}
+
 /**
  * implementacion en memoria, para desarrollo local sin depender de supabase
  *
@@ -8,23 +13,24 @@ import type { MessagingChannel } from './MessagingProviderFactory';
  * credenciales de supabase configuradas (ver ContactDirectoryFactory)
  */
 export class InMemoryContactDirectory implements ContactDirectory {
-  private readonly telegramChatIdsByPhone: Record<string, string> = {
-    // '+5493751234567': '987654321', // chat_id obtenido cuando ese contacto le escribio al bot
-  };
+  // formado por name del tecnico, igual que la columna name de la tabla contacts
+  private readonly contactsByName: Record<string, InMemoryContact> = {};
 
-  async resolveRecipient(
-    phone: string,
+  async resolveRecipients(
+    to: string,
     channel: MessagingChannel,
-  ): Promise<string | undefined> {
-    switch (channel) {
-      case 'telegram':
-        return this.telegramChatIdsByPhone[phone];
-      case 'whatsapp':
-        // whatsapp cloud api identifica al destinatario por su numero de telefono
-        // directamente, no necesita ningun mapeo previo
-        return phone;
-      default:
-        return undefined;
-    }
+  ): Promise<string[]> {
+    const names =
+      to === 'broadcast' ? Object.keys(this.contactsByName) : to.split(',');
+
+    return names
+      .map((name) => this.contactsByName[name])
+      .filter((contact): contact is InMemoryContact => contact != null)
+      .map((contact) =>
+        channel === 'telegram'
+          ? contact.telegram_chat_id
+          : contact.phone,
+      )
+      .filter((value): value is string => value != null);
   }
 }

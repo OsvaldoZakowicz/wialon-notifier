@@ -15,13 +15,11 @@ create index notifications_log_received_at_idx on notifications_log (received_at
 alter table notifications_log enable row level security;
 
 
--- tabla de contactos: mapea un telefono al chat_id de telegram correspondiente
--- (whatsapp no necesita mapeo, usa el telefono directo, ver ContactDirectory)
 create table contacts (
   id uuid primary key default gen_random_uuid(),
-  phone text not null unique,
-  telegram_chat_id text,
-  client_id text,
+  name text not null unique,          -- "lucas", "mauri" → el que va en to=
+  phone text,                          -- para whatsapp
+  telegram_chat_id text,               -- para telegram
   created_at timestamptz not null default now()
 );
 
@@ -29,6 +27,6 @@ create index contacts_phone_idx on contacts (phone);
 
 alter table contacts enable row level security;
 
--- carga tu primer contacto de prueba (reemplaza los valores reales):
--- insert into contacts (phone, telegram_chat_id, client_id)
--- values ('+5493751234567', '987654321', 'cliente_01');
+-- insert de ejemplo para cargar tu primer contacto (name = lo que va en to=)
+-- insert into contacts (name, phone, telegram_chat_id) values ('osval', '+5493765073022', '1527018098');
+

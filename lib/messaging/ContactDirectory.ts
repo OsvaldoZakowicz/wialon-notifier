@@ -1,17 +1,14 @@
-// implementacion en memoria para el prototipo, se reemplaza despues por una tabla en base
 import type { MessagingChannel } from './MessagingProviderFactory';
 
 /**
- * repository pattern: abstrae de donde sale el mapeo telefono -> identificador por canal
- *
- * cada canal identifica al destinatario de forma distinta:
+ * repository pattern: abstrae de donde sale el mapeo del parametro "to" del post
+ * a los destinatarios de cada canal. "to" es el nombre del tecnico (columna name
+ * de la tabla contacts) o el literal "broadcast" (todos los contactos):
  *   - telegram no permite mandar mensajes a un numero de telefono directo, solo a un
  *     chat_id (que se obtiene cuando esa persona le escribe primero al bot)
- *   - whatsapp cloud api si acepta el numero de telefono tal cual, no hace falta mapeo
+ *   - whatsapp cloud api identifica al destinatario por su numero de telefono
+ * devuelve SIEMPRE un array (vacio si no hay destinatarios para ese canal), nunca undefined
  */
 export interface ContactDirectory {
-  resolveRecipient(
-    phone: string,
-    channel: MessagingChannel,
-  ): Promise<string | undefined>;
+  resolveRecipients(to: string, channel: MessagingChannel): Promise<string[]>;
 }

@@ -14,7 +14,8 @@ export interface WialonNotification {
   speedLimit?: string;
   exceed?: string;
   client?: string;
-  phone?: string;
+  channel?: string;
+  to?: string;
 }
 
 // parser desacoplado del transporte http, solo transforma datos crudos en el dto
@@ -31,7 +32,8 @@ export class WialonNotificationParser {
       speedLimit: this.optionalField(raw.speedLimit),
       exceed: this.optionalField(raw.exceed),
       client: this.optionalField(raw.client),
-      phone: this.optionalField(raw.tel),
+      channel: this.optionalField(raw.channel), // telegram, whatsapp
+      to: this.optionalField(raw.to), // nombre del contacto
     };
   }
 
