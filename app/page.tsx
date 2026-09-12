@@ -3,6 +3,18 @@
 import { useEffect, useState } from 'react';
 import type { CapturedNotification } from '@/lib/storage/NotificationRepository';
 
+// formato dd.mm.yyyy hh:mm:ss en hora local del navegador
+function formatDateTime(iso: string): string {
+  const date = new Date(iso);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return (
+    [pad(date.getDate()), pad(date.getMonth() + 1), date.getFullYear()].join(
+      '.',
+    ) +
+    ` ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+  );
+}
+
 export default function Home() {
   const [notifications, setNotifications] = useState<CapturedNotification[]>(
     [],
@@ -46,7 +58,9 @@ export default function Home() {
             marginBottom: '1rem',
           }}
         >
-          <strong style={{ color: '#38bdf8' }}>{n.receivedAt}</strong>
+          <strong style={{ color: '#38bdf8' }}>
+            {formatDateTime(n.receivedAt)} hrs
+          </strong>
           <pre style={{ whiteSpace: 'pre-wrap', color: '#e2e8f0' }}>
             {JSON.stringify(n.parsed, null, 2)}
           </pre>
