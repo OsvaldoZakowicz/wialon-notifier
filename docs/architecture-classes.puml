@@ -17,15 +17,7 @@ package "app/api/notifications/wialon" {
 
 package "lib/notifications" {
   interface WialonNotification {
-    notificationTitle : string
-    unit : string
-    unitId? : string
-    eventTime : string
-    location? : string
-    speed? : string
-    speedLimit? : string
-    exceed? : string
-    client? : string
+    notification : string
     to? : string
     channel? : string
   }
@@ -36,9 +28,14 @@ package "lib/notifications" {
   WialonNotificationParser ..> WialonNotification : crea
 
   class "formatNotificationMessage" as formatNotificationMessage <<function>> {
-    formatNotificationMessage(notification: WialonNotification) : string
+    formatNotificationMessage(title: string, raw: Record<string, unknown>) : string
   }
-  formatNotificationMessage ..> WialonNotification : lee
+  note bottom of formatNotificationMessage
+    Tabla declarativa LINE_DEFS (key/label/format):
+    arma el mensaje solo con las lineas cuyos datos
+    llegaron, descartando nulos y tags "%TAG%" sin resolver.
+  end note
+  formatNotificationMessage ..> "raw body" : lee
 }
 
 package "lib/messaging" {

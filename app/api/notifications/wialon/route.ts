@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     console.log('notificacion de wialon recibida:', rawBody);
 
     if (parsed.to) {
-      const message = formatNotificationMessage(parsed);
+      const message = formatNotificationMessage(parsed.notification, rawBody);
       const channel = parsed.channel === 'whatsapp' ? 'whatsapp' : 'telegram';
       try {
         await NotificationDispatcher.dispatch(parsed.to, message, channel);
